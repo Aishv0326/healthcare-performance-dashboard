@@ -1,0 +1,6 @@
+@Hpd_HostAddress = http://localhost:5143
+
+GET {{Hpd_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
