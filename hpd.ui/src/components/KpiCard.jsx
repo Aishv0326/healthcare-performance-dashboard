@@ -1,28 +1,43 @@
 import { Paper, Typography, Stack, Box } from "@mui/material";
 
+/**
+ * KpiCard
+ *
+ * Reusable KPI card component used to display high-level metrics
+ * such as request count, latency, error rate, and uptime.
+ *
+ * Props:
+ * - title: Label shown at the top of the card
+ * - value: Main numeric value displayed
+ * - suffix: Optional unit (e.g. "ms", "%")
+ * - icon: Optional visual icon shown on the right
+ * - onClick: Optional click handler (used for telemetry or drill-down actions)
+ */
 export default function KpiCard({
   title,
   value,
   suffix = "",
   icon = null,
-  onClick, // 👈 add this
+  onClick,
 }) {
   return (
     <Paper
       elevation={0}
-      onClick={onClick} // 👈 and this
+      onClick={onClick}
       sx={{
         p: 2,
         borderRadius: 2,
         position: "relative",
         overflow: "hidden",
         boxShadow: "0 6px 18px rgba(0,0,0,0.08)",
+
+        // Enable hover and pointer cursor only if the card is clickable
         cursor: onClick ? "pointer" : "default",
         transition: "transform 0.15s ease",
         "&:hover": onClick ? { transform: "translateY(-2px)" } : {},
       }}
     >
-      {/* left accent */}
+      {/* Decorative left accent bar to visually group KPI cards */}
       <Box
         sx={{
           position: "absolute",
@@ -35,16 +50,19 @@ export default function KpiCard({
       />
 
       <Stack direction="row" justifyContent="space-between" alignItems="center">
+        {/* KPI text content */}
         <Box>
           <Typography variant="subtitle2" sx={{ opacity: 0.75 }}>
             {title}
           </Typography>
+
           <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5 }}>
             {value}
             {suffix}
           </Typography>
         </Box>
 
+        {/* Optional icon container */}
         {icon ? (
           <Box
             sx={{

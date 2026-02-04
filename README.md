@@ -81,10 +81,10 @@ All endpoints are accessed at `https://localhost:7011`.
 | Method | Endpoint                                                       | Purpose                                             |
 | ------ | -------------------------------------------------------------- | --------------------------------------------------- |
 | GET    | `/api/health`                                                  | Health check status                                 |
-| GET    | `/api/metrics/summary?hours=24`                                | Key performance indicators for specified time range |
+| GET    | `/api/metrics/summary?range=24h`                               | Key performance indicators for specified time range |
 | GET    | `/api/metrics/trends?range=24h&bucket=5m`                      | Historical trend data for visualization             |
 | GET    | `/api/metrics/top-endpoints?range=24h&sort=latencyP95&take=10` | Slowest endpoints ranked by latency                 |
-| POST   | `/api/metrics/reset`                                           | Clear all metrics and restart generation            |
+| DELETE | `/api/metrics/reset`                                           | Clear all metrics and restart generation            |
 
 ---
 

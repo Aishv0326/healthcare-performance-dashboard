@@ -3,6 +3,9 @@ using Hpd.Api.Models;
 
 namespace Hpd.Api.Services
 {
+    // Background service that simulates real-world API traffic.
+    // Runs continuously and inserts metric data into the database.
+
     public class MetricGeneratorService : BackgroundService
     {
         private readonly IServiceScopeFactory _scopeFactory;
@@ -25,7 +28,7 @@ namespace Hpd.Api.Services
             "/api/labs/results",
             "/api/billing/claims"
         };
-
+        // Used to simulate temporary incident windows
         private bool _incidentActive = false;
         private DateTime _incidentEndTime;
 
@@ -34,6 +37,7 @@ namespace Hpd.Api.Services
             _scopeFactory = scopeFactory;
         }
 
+        // Main background loop
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             while (!stoppingToken.IsCancellationRequested)
@@ -43,10 +47,9 @@ namespace Hpd.Api.Services
                 await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
             }
         }
-
+        // Randomly starts and ends simulated incidents
         private void GenerateIncidentIfNeeded()
         {
-            // 5% chance to start an incident
             if (!_incidentActive && _random.Next(1, 100) <= 5)
             {
                 _incidentActive = true;
@@ -58,7 +61,7 @@ namespace Hpd.Api.Services
                 _incidentActive = false;
             }
         }
-
+        // Inserts a batch of metric events into the database
         private async Task GenerateBatch()
         {
             using var scope = _scopeFactory.CreateScope();
