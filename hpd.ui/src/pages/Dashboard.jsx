@@ -8,24 +8,43 @@ import TopEndpointsTable from "../components/TopEndpointsTable";
 import { getSummary, getTrends, getTopEndpoints } from "../api/client";
 import { trackEvent, trackError } from "../monitoring/logger";
 
+/**
+ * Dashboard
+ *
+ * Main page of the Healthcare Performance Dashboard.
+ * Responsible for:
+ * - Fetching backend metrics
+ * - Transforming API responses into chart-friendly data
+ * - Rendering KPIs, charts, and tables
+ * - Tracking basic client-side telemetry
+ */
 export default function Dashboard() {
+  // High-level KPI summary (requests, latency, error rate, uptime)
   const [summary, setSummary] = useState(null);
+
+  // Time-series data used by charts
   const [trendData, setTrendData] = useState([]);
+
+  // Aggregated per-endpoint performance data
   const [topEndpoints, setTopEndpoints] = useState([]);
 
   useEffect(() => {
+    // Track page load for basic client-side telemetry
     trackEvent("PageView", { page: "Dashboard" });
 
     async function load() {
       try {
+        // Fetch data from backend API
         const s = await getSummary();
         const t = await getTrends();
         const top = await getTopEndpoints();
 
         setSummary(s);
 
+        // Transform backend arrays into a single array of objects
+        // suitable for Recharts
         const chartData = t.timestampsUtc.map((time, i) => ({
-          time: time.substring(11, 16),
+          time: time.substring(11, 16), // HH:mm
           latency: t.avgLatencyMs[i],
           error: t.errorRatePct[i],
           uptime: t.uptimeRatePct[i],
@@ -34,12 +53,14 @@ export default function Dashboard() {
         setTrendData(chartData);
         setTopEndpoints(top);
 
+        // Track successful dashboard load
         trackEvent("DashboardDataLoaded", {
           totalRequests: s.totalRequests,
           points: chartData.length,
           endpoints: top.length,
         });
       } catch (err) {
+        // Track unexpected client-side errors
         trackError(err, { where: "Dashboard.load" });
       }
     }
@@ -47,6 +68,7 @@ export default function Dashboard() {
     load();
   }, []);
 
+  // Simple loading state while data is being fetched
   if (!summary) {
     return (
       <Box sx={{ minHeight: "100vh", py: 4 }}>
@@ -60,14 +82,18 @@ export default function Dashboard() {
   return (
     <Box sx={{ minHeight: "100vh", py: 4 }}>
       <Container>
+        {/* Page title */}
         <Typography variant="h4" mb={3}>
           Healthcare Performance Dashboard
         </Typography>
+
+        {/* Short description */}
         <Typography variant="body1" sx={{ opacity: 0.8, mb: 3 }}>
           Live performance view of API latency, uptime, and error rates (demo
           data generator running).
         </Typography>
 
+        {/* KPI section */}
         <Typography variant="h6" sx={{ mb: 1 }}>
           System Overview
         </Typography>
@@ -81,6 +107,7 @@ export default function Dashboard() {
               onClick={() => trackEvent("KPI_Click", { kpi: "Requests" })}
             />
           </Grid>
+
           <Grid item xs={12} sm={6} md={3}>
             <KpiCard
               title="Avg Latency"
@@ -89,6 +116,7 @@ export default function Dashboard() {
               icon={<span>⏱️</span>}
             />
           </Grid>
+
           <Grid item xs={12} sm={6} md={3}>
             <KpiCard
               title="Error Rate"
@@ -97,6 +125,7 @@ export default function Dashboard() {
               icon={<span>⚠️</span>}
             />
           </Grid>
+
           <Grid item xs={12} sm={6} md={3}>
             <KpiCard
               title="Uptime"
@@ -107,9 +136,11 @@ export default function Dashboard() {
           </Grid>
         </Grid>
 
+        {/* Trend charts */}
         <Typography variant="h6" sx={{ mt: 3, mb: 1 }}>
           Performance Trends
         </Typography>
+
         <Stack spacing={2}>
           <Paper
             sx={{
@@ -154,6 +185,7 @@ export default function Dashboard() {
           </Paper>
         </Stack>
 
+        {/* Top endpoints table */}
         <Paper
           sx={{
             p: 2,

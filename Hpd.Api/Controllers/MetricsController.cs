@@ -7,6 +7,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Hpd.Api.Controllers
 {
+    // API controller responsible for exposing performance metrics
+    // consumed by the React dashboard.
+
     [ApiController]
     [Route("api/[controller]")]
     public class MetricsController : ControllerBase
@@ -16,7 +19,8 @@ namespace Hpd.Api.Controllers
         {
             _db = db;
         }
-       
+
+        // Returns overall KPI summary for the given time window
         [HttpGet("summary")]
         public async Task<IActionResult> Summary([FromQuery] string range = "24h")
         {
@@ -53,87 +57,55 @@ namespace Hpd.Api.Controllers
             });
         }
 
-        //[HttpGet("trends")]
-        //public async Task<IActionResult> Trends([FromQuery] string range = "24h", [FromQuery] string bucket = "5m")
-        //{
-        //    var rangeTs = TimeRangeParser.Parse(range, TimeSpan.FromHours(24));
-        //    var bucketTs = TimeRangeParser.Parse(bucket, TimeSpan.FromMinutes(5));
-
-        //    // guardrails
-        //    if (bucketTs < TimeSpan.FromMinutes(1)) bucketTs = TimeSpan.FromMinutes(1);
-        //    if (bucketTs > TimeSpan.FromHours(1)) bucketTs = TimeSpan.FromHours(1);
-
-        //    var since = DateTime.UtcNow - rangeTs;
-
-        //    // pull only what we need to compute buckets
-        //    var events = await _db.MetricEvents
-        //        .Where(x => x.TimestampUtc >= since)
-        //        .Select(x => new { x.TimestampUtc, x.LatencyMs, x.IsError, x.IsUp })
-        //        .ToListAsync();
-
-        //    // bucket start = floor(timestamp to bucket interval
-        //    static DateTime FloorToBucket(DateTime dt, TimeSpan bucketSize)
-        //    {
-        //        var ticks = dt.Ticks - (dt.Ticks % bucketSize.Ticks);
-        //        return new DateTime(ticks, DateTimeKind.Utc);
-        //    }
-
-        //    var grouped = events
-        //        .GroupBy(e => FloorToBucket(e.TimestampUtc, bucketTs))
-        //        .OrderBy(g => g.Key)
-        //        .ToList();
-
-        //    var resp = new TrendsResponse { Range = range, Bucket = bucket };
-
-        //    foreach (var g in grouped)
-        //    {
-        //        var total = g.Count();
-        //        if (total == 0) continue;
-
-        //        var avgLatency = (int)Math.Round(g.Average(x => (double)x.LatencyMs));
-        //        var errorRate = Math.Round(g.Count(x => x.IsError) * 100.0 / total, 2);
-        //        var uptimeRate = Math.Round(g.Count(x => x.IsUp) * 100.0 / total, 2);
-
-        //        // requests per minute for this bucket
-        //        var rpm = Math.Round(total / bucketTs.TotalMinutes, 2);
-
-        //        resp.TimestampsUtc.Add(g.Key);
-        //        resp.AvgLatencyMs.Add(avgLatency);
-        //        resp.ErrorRatePct.Add(errorRate);
-        //        resp.UptimeRatePct.Add(uptimeRate);
-        //        resp.RequestsPerMinute.Add(rpm);
-        //    }
-
-        //    return Ok(resp);
-        //}
+        /// <summary>
+        /// Returns time-series metrics for charts (latency, error rate, uptime, RPM)
+        /// bucketed into fixed intervals (e.g., 5 minutes) over a time range (e.g., 24 hours).
+        ///
+        /// Important behavior:
+        /// - We generate a full timeline from "since" -> now, so missing buckets are returned as zeros.
+        ///   This keeps chart X-axis consistent and avoids broken / jagged graphs when no traffic exists.
+        /// </summary>
+        /// <param name="range">Time window to look back (examples: 30m, 24h, 7d). Default: 24h.</param>
+        /// <param name="bucket">Bucket size for aggregation (examples: 1m, 5m, 15m). Default: 5m.</param>
         [HttpGet("trends")]
         public async Task<IActionResult> Trends([FromQuery] string range = "24h", [FromQuery] string bucket = "5m")
         {
+            // Parse range and bucket into TimeSpan values with safe defaults.
+            // This lets the frontend pass simple strings like "24h" or "5m".
             var rangeTs = TimeRangeParser.Parse(range, TimeSpan.FromHours(24));
             var bucketTs = TimeRangeParser.Parse(bucket, TimeSpan.FromMinutes(5));
 
+            // Guardrails to avoid heavy queries / too many data points:
+            // - minimum bucket = 1 minute
+            // - maximum bucket = 1 hour
             if (bucketTs < TimeSpan.FromMinutes(1)) bucketTs = TimeSpan.FromMinutes(1);
             if (bucketTs > TimeSpan.FromHours(1)) bucketTs = TimeSpan.FromHours(1);
 
             var since = DateTime.UtcNow - rangeTs;
 
+            // Load only the fields needed for aggregation.
+            // NOTE: For very large datasets, this could be optimized to aggregate in SQL directly.
             var events = await _db.MetricEvents
                 .Where(x => x.TimestampUtc >= since)
                 .Select(x => new { x.TimestampUtc, x.LatencyMs, x.IsError, x.IsUp })
                 .ToListAsync();
 
+            // Floors a timestamp to the start of its bucket.
+            // Example: 10:07 with a 5m bucket becomes 10:05.
             static DateTime FloorToBucket(DateTime dt, TimeSpan bucketSize)
             {
                 var ticks = dt.Ticks - (dt.Ticks % bucketSize.Ticks);
                 return new DateTime(ticks, DateTimeKind.Utc);
             }
 
-            // Group actual data
+            // Group actual events by bucket start time.
+            // We store as a dictionary for O(1) lookup when filling the full timeline.
             var grouped = events
                 .GroupBy(e => FloorToBucket(e.TimestampUtc, bucketTs))
                 .ToDictionary(g => g.Key, g => g.ToList());
 
-            // Generate full timeline
+            // Build a complete bucket timeline so charts always have continuous X-axis points.
+            // If no data exists for a bucket, we return zeros for that bucket.
             var timeline = new List<DateTime>();
             var cursor = FloorToBucket(since, bucketTs);
             var now = DateTime.UtcNow;
@@ -152,6 +124,12 @@ namespace Hpd.Api.Controllers
                 {
                     var total = bucketEvents.Count;
 
+
+                    // Aggregate metrics for this bucket:
+                    // - avg latency (ms)
+                    // - error rate (%)
+                    // - uptime rate (%)
+                    // - requests per minute (RPM)
                     var avgLatency = (int)Math.Round(bucketEvents.Average(x => (double)x.LatencyMs));
                     var errorRate = Math.Round(bucketEvents.Count(x => x.IsError) * 100.0 / total, 2);
                     var uptimeRate = Math.Round(bucketEvents.Count(x => x.IsUp) * 100.0 / total, 2);
@@ -164,8 +142,8 @@ namespace Hpd.Api.Controllers
                     resp.RequestsPerMinute.Add(rpm);
                 }
                 else
-                {
-                    // Missing bucket → zeros
+                { 
+                    // Missing bucket -> return zeros so charts remain stable and predictable.
                     resp.TimestampsUtc.Add(ts);
                     resp.AvgLatencyMs.Add(0);
                     resp.ErrorRatePct.Add(0);
@@ -176,6 +154,19 @@ namespace Hpd.Api.Controllers
 
             return Ok(resp);
         }
+        /// <summary>
+        /// Returns per-endpoint performance ranking over a time range.
+        /// Useful for identifying bottlenecks and endpoints that produce errors.
+        ///
+        /// Metrics returned per endpoint:
+        /// - total requests
+        /// - average latency
+        /// - P95 latency (approx percentile using sorted list)
+        /// - error rate (%)
+        /// </summary>
+        /// <param name="range">Time window to look back (examples: 30m, 24h, 7d). Default: 24h.</param>
+        /// <param name="sort">Sort key (requests, latencyAvg, latencyP95, errorRate). Default: latencyP95.</param>
+        /// <param name="take">Number of endpoints to return (bounded to 1..50).</param>
 
         [HttpGet("top-endpoints")]
         public async Task<IActionResult> TopEndpoints(
@@ -183,17 +174,22 @@ namespace Hpd.Api.Controllers
          [FromQuery] string sort = "latencyP95",
          [FromQuery] int take = 10)
         {
+            // Limit output size to avoid huge payloads.
             if (take < 1) take = 10;
             if (take > 50) take = 50;
 
             var rangeTs = TimeRangeParser.Parse(range, TimeSpan.FromHours(24));
             var since = DateTime.UtcNow - rangeTs;
 
+            // Pull only the minimal fields needed for endpoint aggregation.
             var events = await _db.MetricEvents
                 .Where(x => x.TimestampUtc >= since)
                 .Select(x => new { x.Endpoint, x.LatencyMs, x.IsError })
                 .ToListAsync();
 
+            // Helper to compute P95 latency:
+            // - sort latencies and pick the 95th percentile index
+            // NOTE: This is fine for demo scale; for large data you’d compute percentile in SQL or via approximation.
             static int P95(List<int> values)
             {
                 if (values.Count == 0) return 0;
@@ -203,6 +199,7 @@ namespace Hpd.Api.Controllers
                 return values[idx];
             }
 
+            // Group metrics by endpoint and compute summary stats.
             var items = events
                 .GroupBy(x => x.Endpoint ?? "")
                 .Select(g =>
@@ -223,6 +220,7 @@ namespace Hpd.Api.Controllers
                     };
                 });
 
+            // Apply user-selected sorting.
             items = sort.ToLowerInvariant() switch
             {
                 "requests" => items.OrderByDescending(x => x.Requests),
@@ -235,6 +233,10 @@ namespace Hpd.Api.Controllers
             return Ok(items.Take(take).ToList());
         }
 
+        /// <summary>
+        /// Clears all MetricEvents from the database.
+        /// Useful for demos, testing, and resetting the dashboard to a clean state.
+        /// </summary>
         [HttpDelete("reset")]
         public async Task<IActionResult> Reset()
         {
