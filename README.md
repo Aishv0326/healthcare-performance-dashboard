@@ -51,7 +51,7 @@ React Dashboard (Material UI + Recharts)
 
 ### Frontend
 
-- **React 18** - UI library
+- **React 19** - UI library
 - **Vite** - Build tool and dev server
 - **Material UI (MUI)** - Component library
 - **Recharts** - Charting library
