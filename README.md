@@ -46,7 +46,7 @@ React Dashboard (Material UI + Recharts)
 - **ASP.NET Core 8** - Web API framework
 - **Entity Framework Core** - Object-relational mapping
 - **SQL Server LocalDB** - Local database
-- **Swagger/OpenAPI** - API documentation
+- **Swagger** - API documentation
 - **Background Services** - Continuous metric generation
 
 ### Frontend
